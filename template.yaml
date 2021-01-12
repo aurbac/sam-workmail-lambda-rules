@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  sam-workmail-lambda-rules
+
+  Sample SAM Template for sam-workmail-lambda-rules
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 10
+    
+Parameters:
+  Domain:
+    Type: String
+    Description: Domain
+
+Resources:
+  InboundRuleFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: code/
+      Handler: app.inbound_handler
+      Runtime: python3.8
+      Environment:
+        Variables:
+            DOMAIN: !Ref Domain
+            MESSAGES_TABLE: !Ref Messages
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref Messages
+            
+  PermissionToCallInboundRuleFunction:
+      Type: AWS::Lambda::Permission
+      DependsOn: InboundRuleFunction
+      Properties: 
+        Action: lambda:InvokeFunction
+        FunctionName: !Ref InboundRuleFunction
+        Principal: !Sub 'workmail.${AWS::Region}.amazonaws.com'
+            
+  OutboundRuleFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: code/
+      Handler: app.outbound_handler
+      Runtime: python3.8
+      Environment:
+        Variables:
+            DOMAIN: !Ref Domain
+            MESSAGES_TABLE: !Ref Messages
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref Messages
+            
+  PermissionToCallOutboundRuleFunction:
+      Type: AWS::Lambda::Permission
+      DependsOn: OutboundRuleFunction
+      Properties: 
+        Action: lambda:InvokeFunction
+        FunctionName: !Ref OutboundRuleFunction
+        Principal: !Sub 'workmail.${AWS::Region}.amazonaws.com'
+
+  Messages:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+      - AttributeName: "messageId"
+        AttributeType: "S"
+      KeySchema:
+      - AttributeName: "messageId"
+        KeyType: "HASH"
+      BillingMode: "PAY_PER_REQUEST"
+      SSESpecification:
+        SSEEnabled: True
+        
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  InboundRuleFunction:
+    Description: "Inbound Rule Lambda Function ARN"
+    Value: !Ref InboundRuleFunction
+  OutboundRuleFunction:
+    Description: "Outbound Rule Lambda Function ARN"
+    Value: !Ref OutboundRuleFunction
